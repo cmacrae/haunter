@@ -161,9 +161,6 @@ func NewProvider(key string) (Proxies, error) {
 	defer r.Body.Close()
 	json.NewDecoder(r.Body).Decode(&p)
 
-	fmt.Println(r.StatusCode)
-	fmt.Println(r.Body)
-
 	for _, v := range p {
 		proxyCount.WithLabelValues(
 			v.ProxyIP,

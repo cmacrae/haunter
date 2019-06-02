@@ -1,0 +1,149 @@
+https://i.imgur.com/ocb0C1x.png
+
+* About
+Before the shutdown of GhostProxies, this library was [[https://github.com/cmacrae/gastly][~gastly~]]  
+It has since evolved, and is now based on the proxy provider My Private Proxy, by MPP Group... but that doesn't make for a fun name
+
+* Features
+  - Automatic proxy retrieval/setup
+  - Automatic HTTP retries, with configurable behavior
+  - Prometheus metrics
+
+* Example
+** Implementation
+   The following example can be written out to an example program using ~make example~.  
+   You can then use ~cd example ; go run main.go~ to run it (you'll need to export a ~MPP_KEY~ environment variable for it to function).
+#+begin_src go :tangle example/main.go
+package main
+
+import (
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/cmacrae/haunter"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+// Serve Prometheus metrics on port 3000
+func init() {
+	go func() {
+		if err := serveMetrics(3000); err != nil {
+			log.Printf("Unable to serve metric: %v\n", err)
+		}
+	}()
+}
+
+func main() {
+	// Set up proxies
+	p, err := haunter.NewProvider(os.Getenv("MPP_KEY"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Configure retry behavior
+	retryOptions := haunter.RetryOptions{
+		Max:             3,
+		WaitMaxSecs:     6,
+		WaitMinSecs:     1,
+		BackoffStepSecs: 2,
+	}
+
+	// For demonstration: every second, pick a random proxy from the account
+	// use it to GET icanhazip.com
+	for range time.NewTicker(1 * time.Second).C {
+		resp, err := p.Get("http://icanhazip.com", nil, retryOptions)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		code := resp.StatusCode
+		fmt.Println(fmt.Sprintf("%v%v - %v\n", string(body), code, http.StatusText(code)))
+	}
+}
+
+// ServeMetrics provides a Prometheus endpoint for monitoring/observability
+func serveMetrics(port int) error {
+	// Expose metrics from haunter so they can be served
+	opts := &haunter.Metrics{
+		RequestCounter: true,
+		ProxyCounter:   true,
+	}
+
+	metrics := opts.Expose()
+
+	for _, v := range metrics {
+		prometheus.MustRegister(v)
+	}
+
+	http.Handle("/metrics", promhttp.Handler())
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+
+	return nil
+}
+#+end_src
+
+** Output
+#+begin_example
+$ make example
+Tangled 1 code block from README.org
+See the example implementation in the 'example' directory!
+
+$ export MPP_KEY=<your key here>
+$ cd example ; go run main.go
+123.45.678.90
+200 - OK
+
+90.123.45.678
+200 - OK
+
+45.12.90.453
+200 - OK
+
+459.12.3.45
+200 - OK
+
+90.123.45.678
+200 - OK
+
+123.45.678.90
+200 - OK
+#+end_example
+
+** Metrics
+#+begin_example
+$ curl -s localhost:3000/metrics | fgrep haunter
+# HELP haunter_external_http_requests_total How many external HTTP requests processed, partitioned by status code, method and proxy IP
+# TYPE haunter_external_http_requests_total counter
+haunter_external_http_requests_total{code="200",method="GET",proxy_ip="123.45.678.90"} 901
+haunter_external_http_requests_total{code="200",method="GET",proxy_ip="90.123.45.678"} 804
+haunter_external_http_requests_total{code="200",method="GET",proxy_ip="45.12.90.45"} 885
+haunter_external_http_requests_total{code="200",method="GET",proxy_ip="45.12.90.453"} 620
+haunter_external_http_requests_total{code="200",method="GET",proxy_ip="90.123.45.67"} 690
+haunter_external_http_requests_total{code="404",method="GET",proxy_ip="123.45.678.90"} 19
+haunter_external_http_requests_total{code="404",method="GET",proxy_ip="90.123.45.678"} 18
+haunter_external_http_requests_total{code="404",method="GET",proxy_ip="45.12.90.45"} 20
+haunter_external_http_requests_total{code="404",method="GET",proxy_ip="45.12.90.453"} 12
+haunter_external_http_requests_total{code="404",method="GET",proxy_ip="90.123.45.67"} 15
+haunter_external_http_requests_total{code="429",method="GET",proxy_ip="123.45.678.90"} 745
+haunter_external_http_requests_total{code="429",method="GET",proxy_ip="90.123.45.678"} 709
+haunter_external_http_requests_total{code="429",method="GET",proxy_ip="45.12.90.45"} 711
+haunter_external_http_requests_total{code="429",method="GET",proxy_ip="45.12.90.453"} 359
+haunter_external_http_requests_total{code="429",method="GET",proxy_ip="90.123.45.67"} 738
+# HELP haunter_proxy_count How many proxy servers are configured, partitioned by IP, status, city, region, and country.
+# TYPE haunter_proxy_count counter
+haunter_proxy_count{city="Chicago",country="US",ip="123.45.678.90",region="Illinois",status="online"} 1
+haunter_proxy_count{city="Chicago",country="US",ip="90.123.45.678",region="Illinois",status="online"} 1
+haunter_proxy_count{city="London",country="UK",ip="45.12.90.45",region="England",status="online"} 1
+haunter_proxy_count{city="London",country="UK",ip="45.12.90.453",region="England",status="online"} 1
+haunter_proxy_count{city="New York",country="US",ip="90.123.45.67"",region="New York",status="online"} 1
+#+end_example

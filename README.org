@@ -1,7 +1,7 @@
-https://i.imgur.com/ocb0C1x.png
+[[https://i.imgur.com/ocb0C1x.png]]
 
 * About
-Before the shutdown of GhostProxies, this library was [[https://github.com/cmacrae/gastly][~gastly~]]  
+Before the shutdown of GhostProxies, this library was [[https://github.com/cmacrae/gastly][cmacrae/gastly]]  
 It has since evolved, and is now based on the proxy provider My Private Proxy, by MPP Group... but that doesn't make for a fun name
 
 * Features

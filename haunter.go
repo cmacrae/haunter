@@ -84,18 +84,10 @@ func (m Metrics) Expose() []*prometheus.CounterVec {
 	return exposed
 }
 
-// RandProxy returns a random proxy from a Provider's list of proxies
-func (p Proxies) RandProxy() Proxy {
-	s := rand.NewSource(time.Now().Unix())
-	r := rand.New(s)
-	rand := r.Intn(len(p))
-
-	return p[rand]
-}
-
 // NewClient returns a retryablehttp.Client configured to use a random proxy
 func (p Proxies) NewClient(req *retryablehttp.Request, opts RetryOptions) (*retryablehttp.Client, string, error) {
-	proxy := p.RandProxy()
+	// Pick a random proxy
+	proxy := p[rand.Intn(len(p))]
 	proxyURL, err := url.ParseRequestURI(fmt.Sprintf("http://%s:%s", proxy.ProxyIP, proxy.ProxyPort))
 	if err != nil {
 		return &retryablehttp.Client{}, "", fmt.Errorf("%v", err)
